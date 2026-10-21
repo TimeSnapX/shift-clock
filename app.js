@@ -1,4 +1,5 @@
-import * as P from './pay.js';
+import * as P from './pay.js?v=3';
+import { mapPayLedger } from './js/plimport.js?v=3';
 const $ = id => document.getElementById(id);
 const KEY = 'shiftclock.v1';
 const fmt$ = v => '$' + (v || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -203,10 +204,24 @@ $('addShift').onclick = () => openEdit(null);
 $('expJson').onclick = () => download(`shift-clock-${P.bneDateKey(Date.now())}.json`, JSON.stringify({ app: 'shift-clock', version: 1, exported: new Date().toISOString(), ...st }, null, 2), 'application/json');
 $('expCsv').onclick = () => download(`shift-clock-${P.bneDateKey(Date.now())}.csv`, csv(), 'text/csv');
 $('impJson').onclick = () => $('impFile').click();
-$('impFile').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { const d = JSON.parse(await f.text()); if (!Array.isArray(d.shifts)) throw 0;
+$('impFile').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { const d = JSON.parse(await f.text());
+  if (d && d.app === 'pay-ledger') { e.target.value = ''; return importPayLedger(d); } if (!Array.isArray(d.shifts)) throw 0;
   if (!confirm(`Import ${d.shifts.length} shifts? Existing shifts with the same id are replaced.`)) return;
   const m = new Map(st.shifts.map(s => [s.id, s])); d.shifts.forEach(s => s && isFinite(s.start) && m.set(s.id, { breaks: [], meal: false, note: '', ...s }));
   st.shifts = [...m.values()]; if (d.settings) st.settings = { ...P.DEFAULTS, ...d.settings }; save(); render(); } catch { alert('Not a valid Shift Clock JSON file.'); } e.target.value = ''; };
+
+$('impPL').onclick = () => $('plFile').click();
+$('plFile').onchange = async e => { const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let d; try { d = JSON.parse(await f.text()); } catch { return alert('That file isn’t valid JSON. Pick the pay-ledger-backup-….json file.'); }
+  importPayLedger(d); };
+function importPayLedger(d) {
+  let r; try { r = mapPayLedger(d, st.shifts); } catch (err) { return alert(err.message + ' Pick the pay-ledger-backup-….json file.'); }
+  const dup = r.skipped.filter(x => x.reason === 'duplicate').length, bad = r.skipped.length - dup;
+  if (!r.shifts.length) return alert(`Nothing new to import: ${d.shifts.length} shifts in the file, ${dup} already in Shift Clock${bad ? `, ${bad} unusable` : ''}.`);
+  const days = r.shifts.map(s => P.bneDateKey(s.start)), hrs = r.shifts.reduce((t, s) => t + P.paidHours(s), 0);
+  if (!confirm(`Pay Ledger backup: ${d.shifts.length} shifts.\n\nImport ${r.shifts.length} new shifts (${days[0]} to ${days.at(-1)}, ${fmtH(hrs)} paid hours).\nSkip ${dup} already in Shift Clock${bad ? `, ${bad} unusable` : ''}.\n\nNothing existing is changed or deleted.`)) return;
+  st.shifts.push(...r.shifts); save(); render(); alert(`Imported ${r.shifts.length} shifts.`);
+}
 
 function render() { renderActions(); renderStartEdit(); tick(); renderWeek(); renderHist(); if (!document.activeElement?.closest?.('#setForm')) renderSettings(); }
 render(); setInterval(tick, 1000);
