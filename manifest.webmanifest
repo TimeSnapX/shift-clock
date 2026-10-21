@@ -1,9 +1,9 @@
 {
-  "id": "/shift-clock/?app=shift-clock",
+  "id": "/shift-clock/",
   "name": "Shift Clock",
   "short_name": "Shift Clock",
   "description": "Shift timer, pay estimate and NHVR fatigue helper for casual heavy rigid drivers.",
-  "start_url": "./",
+  "start_url": "/shift-clock/",
   "scope": "/shift-clock/",
   "display": "standalone",
   "orientation": "portrait",
@@ -12,6 +12,7 @@
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
     { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

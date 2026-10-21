@@ -82,6 +82,44 @@ function renderActions() {
     : `<button class="btn brk" data-a="break">❚❚ Start break (unpaid)</button><button class="btn stop" data-a="stop">■ Stop shift</button>`;
 }
 
+// ---- adjust active shift start ----
+// Allowed range: not later than now (or the first break), not earlier than the Brisbane midnight before the
+// original start's day boundary (i.e. previous midnight relative to now, or the start's own midnight for overnight shifts).
+let startUndo = null;
+function startBounds(a, now = Date.now()) {
+  const firstBrk = (a.breaks || []).reduce((m, b) => Math.min(m, b.start), Infinity);
+  const min = Math.min(P.bneMidnight(now), P.bneMidnight(a.origStart ?? a.start));
+  return { min, max: Math.min(now, firstBrk) };
+}
+function setStart(ms) {
+  const a = active(); if (!a) return false;
+  const { min, max } = startBounds(a), msg = $('startMsg');
+  let v = Math.round(ms / 60e3) * 60e3, note = '';
+  if (v > max) { v = Math.floor(max / 60e3) * 60e3; note = max < Date.now() ? 'Start can’t be after your first break.' : 'Start can’t be later than now.'; }
+  if (v < min) { v = min; note = 'Start can’t be earlier than ' + fday(min) + ' ' + ftime(min) + '.'; }
+  if (v === a.start) { msg.textContent = note; return false; }
+  startUndo = a.start; if (a.origStart == null) a.origStart = a.start;
+  a.start = v; save(); render(); msg.textContent = note || 'Start changed to ' + ftime(v) + '.'; return true;
+}
+function renderStartEdit() {
+  const a = active(); $('startEdit').classList.toggle('on', !!a);
+  if (!a) { startUndo = null; $('startMsg').textContent = ''; return; }
+  $('startBtn').textContent = ftime(a.start) + (P.bneDateKey(a.start) !== P.bneDateKey(Date.now()) ? ' (' + fday(a.start) + ')' : '');
+  $('startUndo').disabled = startUndo == null;
+}
+function openStartDlg() {
+  const a = active(); if (!a) return; const { min, max } = startBounds(a);
+  $('startTime').value = P.toLocalInput(a.start).slice(11);
+  $('startRange').textContent = `Allowed: ${fday(min)} ${ftime(min)} – ${ftime(max)}. A time later than now is taken as yesterday.`;
+  $('startDlg').showModal();
+}
+$('startBtn').onclick = openStartDlg; $('startEditBtn').onclick = openStartDlg;
+$('startSave').onclick = () => { const a = active(), t = $('startTime').value; if (!a || !/^\d\d:\d\d$/.test(t)) return;
+  const now = Date.now(); let v = P.bneFromLocal(P.bneDateKey(now), t); if (v > now) v -= 864e5;
+  setStart(v); $('startDlg').close(); };
+$('startEdit').addEventListener('click', e => { const m = +e.target.dataset.wb; const a = active(); if (m && a) setStart(a.start - m * 60e3); });
+$('startUndo').onclick = () => { const a = active(); if (a && startUndo != null) { const u = startUndo; a.start = u; startUndo = null; save(); render(); $('startMsg').textContent = 'Start restored to ' + ftime(u) + '.'; } };
+
 // ---- week view ----
 let wOff = 0;
 function renderWeek() {
@@ -170,7 +208,7 @@ $('impFile').onchange = async e => { const f = e.target.files[0]; if (!f) return
   const m = new Map(st.shifts.map(s => [s.id, s])); d.shifts.forEach(s => s && isFinite(s.start) && m.set(s.id, { breaks: [], meal: false, note: '', ...s }));
   st.shifts = [...m.values()]; if (d.settings) st.settings = { ...P.DEFAULTS, ...d.settings }; save(); render(); } catch { alert('Not a valid Shift Clock JSON file.'); } e.target.value = ''; };
 
-function render() { renderActions(); tick(); renderWeek(); renderHist(); if (!document.activeElement?.closest?.('#setForm')) renderSettings(); }
+function render() { renderActions(); renderStartEdit(); tick(); renderWeek(); renderHist(); if (!document.activeElement?.closest?.('#setForm')) renderSettings(); }
 render(); setInterval(tick, 1000);
 window.__shiftClock = { get state() { return st; }, P };
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
